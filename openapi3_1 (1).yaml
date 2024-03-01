@@ -62,6 +62,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotFoundError'
+  /data/{tableName}/{recordId}:
+    patch:
+      tags:
+        - Таблицы
+      summary: Частично обновить запись в таблице
+      operationId: updateRecord
+      parameters:
+        - name: tableName
+          in: path
+          required: true
+          description: Название таблицы
+          schema:
+            type: string
+        - name: recordId
+          in: path
+          required: true
+          description: Уникальный идентификатор записи
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataImportItemPatch'
+      responses:
+        '204':
+          description: Запись успешно обновлена
+        '401':
+          description: Ошибка авторизации.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: Запрашиваемый ресурс не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '422':
+          description: Семантическая ошибка запроса.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnprocessableEntityError'
   /users:
     post:
       tags:
@@ -120,11 +166,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotFoundError'
+  /users/{userId}:
     patch:
       tags:
         - Пользователи
       summary: Обновить информацию о пользователе
       operationId: updateUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: Уникальный идентификатор пользователя
       requestBody:
         required: true
         content:
@@ -269,6 +321,123 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UnprocessableEntityError'
+  /query:
+    post:
+      tags:
+        - Запросы
+      summary: Выполнить пользовательский запрос к базе данных
+      operationId: executeQuery
+      description: Выполнить собственный SQL запрос на неосновные таблицы. Защита от иньекций находится в бета-режиме. Требуется `master` scope в ключе авторизации для выполнения запроса.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: Пользовательский SQL запрос
+              required:
+                - query
+      responses:
+        '200':
+          description: Запрос успешно выполнен
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                description: Результат запроса
+        '401':
+          description: Ошибка авторизации.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '422':
+          description: Семантическая ошибка запроса.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnprocessableEntityError'
+  /stats/tables/{tableName}:
+    get:
+      tags:
+        - Статистика
+      summary: Получить статистику по конкретной таблице
+      operationId: getTableStats
+      parameters:
+        - name: tableName
+          in: path
+          required: true
+          description: Название таблицы
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Статистика таблицы получена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rowCount:
+                    type: integer
+                    description: Количество строк в таблице
+                  averageValues:
+                    type: object
+                    additionalProperties:
+                      type: number
+                    description: Средние значения по столбцам
+        '401':
+          description: Ошибка авторизации.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: Таблица не найдена.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+  /logs:
+    get:
+      tags:
+        - Логи
+      summary: Получить системные или пользовательские логи действий
+      operationId: getLogs
+      description: Эндпойнт находится в разработке `NOT IMPLEMENTED`
+      responses:
+        '200':
+          description: Логи успешно получены
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        '401':
+          description: Ошибка авторизации.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+  /health:
+    get:
+      tags:
+        - System
+      summary: Проверить состояние сервиса API
+      operationId: checkHealth
+      responses:
+        '200':
+          description: Сервис API функционирует нормально
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
 components:
   schemas:
     Column:
@@ -487,6 +656,10 @@ components:
     DataImportItemPatch:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+          description: Уникальный идентификатор записи для обновления.
         name:
           type: string
           description: Название записи.
@@ -499,6 +672,8 @@ components:
         additional_properties:
           type: object
           description: Дополнительные поля
+      required:
+        - id
       additionalProperties: false
       description: Запись.
     DataImportRequest:
@@ -546,6 +721,43 @@ components:
           items:
             $ref: '#/components/schemas/ErrorDetail'
       description: Схема ответа для запроса с необрабатываемым экземпляром из-за ошибок валидации.
+    HealthStatus:
+      type: object
+      properties:
+        version:
+          type: string
+          title: Версия
+          description: Версия API сервиса.
+          examples:
+            - "1.0.0"
+        status:
+          type: string
+          title: Статус
+          description: Общий статус здоровья API.
+          examples:
+            - "OK"
+        redis_status:
+          type: boolean
+          title: Статус Redis
+          description: Статус подключения к Redis.
+        postgres_status:
+          type: boolean
+          title: Статус Postgres
+          description: Статус подключения к базе данных Postgres.
+        clickhouse_status:
+          type: boolean
+          title: Статус ClickHouse
+          description: Статус подключения к ClickHouse.
+        kafka_status:
+          type: boolean
+          title: Статус Kafka
+          description: Статус подключения к Kafka.
+        additional_services:
+          type: object
+          additionalProperties:
+            type: boolean
+          title: Статус дополнительных сервисов
+          description: "Статус дополнительных сервисов, динамически включаемых по мере необходимости."
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
