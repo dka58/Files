@@ -177,6 +177,8 @@ paths:
           in: path
           required: true
           description: Уникальный идентификатор пользователя
+          schema:
+            type: string
       requestBody:
         required: true
         content:
